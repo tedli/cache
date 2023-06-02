@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-func WithTTL[Key comparable, Value any](d time.Duration) func(c *Cache[Key, Value]) {
-	return func(c *Cache[Key, Value]) {
+func WithTTL(d time.Duration) func(c *config) {
+	return func(c *config) {
 		c.ttl = d
 	}
 }
 
-func WithRefreshInterval[Key comparable, Value any](d time.Duration) func(c *Cache[Key, Value]) {
-	return func(c *Cache[Key, Value]) {
+func WithRefreshInterval(d time.Duration) func(c *config) {
+	return func(c *config) {
 		c.refreshInterval = d
 	}
 }
@@ -24,27 +24,32 @@ func WithGetter[Key comparable, Value any](getter func(context.Context, Key) (Va
 	}
 }
 
-func WithOnRefreshError[Key comparable, Value any](onRefreshError func(Key, error, func())) func(c *Cache[Key, Value]) {
+func WithOnRefreshError[Key comparable, Value any](onRefreshError func(Key, Value, error, func())) func(c *Cache[Key, Value]) {
 	return func(c *Cache[Key, Value]) {
 		c.onRefreshError = onRefreshError
 	}
 }
 
-func WithBehaviour[Key comparable, Value any](behaviour RefreshBehaviour) func(c *Cache[Key, Value]) {
-	return func(c *Cache[Key, Value]) {
+func WithBehaviour(behaviour RefreshBehaviour) func(c *config) {
+	return func(c *config) {
 		c.behaviour = behaviour
 	}
 }
 
-func BuildCache[Key comparable, Value any](options ...func(*Cache[Key, Value])) (c *Cache[Key, Value]) {
-	c = &Cache[Key, Value]{
+func BuildCache[Key comparable, Value any](options ...func(*Cache[Key, Value])) func(...func(*config)) *Cache[Key, Value] {
+	c := &Cache[Key, Value]{
 		holder: make(map[Key]*Tuple[Value, time.Time]),
 		mutex:  new(sync.Mutex),
 	}
 	for _, option := range options {
 		option(c)
 	}
-	return
+	return func(configs ...func(*config)) *Cache[Key, Value] {
+		for _, cfg := range configs {
+			cfg(&c.config)
+		}
+		return c
+	}
 }
 
 type Tuple[A, B any] struct {
@@ -60,14 +65,18 @@ const (
 	RefreshBehaviourFetchNewValue = 2
 )
 
-type Cache[Key comparable, Value any] struct {
-	holder          map[Key]*Tuple[Value, time.Time]
+type config struct {
+	behaviour       RefreshBehaviour
 	refreshInterval time.Duration
 	ttl             time.Duration
-	getter          func(context.Context, Key) (Value, error)
-	onRefreshError  func(Key, error, func())
-	behaviour       RefreshBehaviour
-	mutex           *sync.Mutex
+}
+
+type Cache[Key comparable, Value any] struct {
+	config
+	holder         map[Key]*Tuple[Value, time.Time]
+	getter         func(context.Context, Key) (Value, error)
+	onRefreshError func(Key, Value, error, func())
+	mutex          *sync.Mutex
 }
 
 func (c Cache[Key, Value]) refresh(ctx context.Context) {
@@ -94,7 +103,7 @@ func (c Cache[Key, Value]) refresh(ctx context.Context) {
 		for _, key := range keys {
 			if value, err := c.getter(ctx, key); err != nil {
 				if c.onRefreshError != nil {
-					c.onRefreshError(key, err, func() {
+					c.onRefreshError(key, c.holder[key].A, err, func() {
 						c.mutex.Lock()
 						defer c.mutex.Unlock()
 						delete(c.holder, key)

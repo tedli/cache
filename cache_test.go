@@ -8,11 +8,14 @@ import (
 )
 
 /*
-   cache_test.go:12: get
-   cache_test.go:31: status: 200
-   cache_test.go:36: cached status: 200
-   cache_test.go:12: get
-   cache_test.go:42: 2nd time status: 200
+=== RUN   TestE2E
+    cache_test.go:20: get
+    cache_test.go:37: status: 200
+    cache_test.go:42: cached status: 200
+    cache_test.go:20: get
+    cache_test.go:48: 2nd time status: 200
+--- PASS: TestE2E (30.00s)
+PASS
 */
 
 func TestE2E(t *testing.T) {
@@ -23,12 +26,10 @@ func TestE2E(t *testing.T) {
 		} else {
 			return resp.StatusCode, nil
 		}
-	}), WithTTL[string, int](10*time.Second), WithBehaviour[string, int](RefreshBehaviourRemoveOnly),
-		WithRefreshInterval[string, int](20*time.Second), WithOnRefreshError[string, int](
-			func(key string, err error, remove func()) {
-				t.Logf("refresh failed, key: %s, error: %#v", key, err)
-				remove()
-			}))
+	}), WithOnRefreshError(func(key string, prevStatus int, err error, remove func()) {
+		t.Logf("refresh failed, key: %s, status: %d, error: %#v", key, prevStatus, err)
+		remove()
+	}))(WithTTL(10*time.Second), WithBehaviour(RefreshBehaviourRemoveOnly), WithRefreshInterval(20*time.Second))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	go cc.Start(ctx)

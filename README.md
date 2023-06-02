@@ -10,7 +10,7 @@ func main() {
 		} else {
 			return resp.StatusCode, nil
 		}
-	}))
+	}))()
 	ctx := context.Background()
 	url := "https://www.github.com"
 	if status, err := cc.Get(ctx, url); err != nil {
