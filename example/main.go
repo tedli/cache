@@ -17,7 +17,7 @@ func main() {
 		}
 	}))
 	ctx := context.Background()
-	url := "http://www.github.com"
+	url := "https://www.github.com"
 	if status, err := cc.Get(ctx, url); err != nil {
 		fmt.Fprintf(os.Stderr, "url: %s, error: %#v\n", url, err)
 	} else {
